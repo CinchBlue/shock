@@ -2,6 +2,7 @@ extern crate uuid;
 
 use uuid::Uuid;
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum PrimitiveData {
@@ -20,7 +21,6 @@ pub enum PlaceData {
 
 pub type PlaceId = uuid::Uuid;
 
-#[derive(Debug)]
 pub struct Place {
     id: PlaceId,
     name: std::string::String,
@@ -32,6 +32,13 @@ impl Clone for Place {
         Place { id: Place::generate_id(), name: self.name.clone(), attr: self.attr.clone()}
     }
 }
+
+impl fmt::Debug for Place {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Place {{ id: {}, name: {}, attr: {:?} }}", self.id.to_hyphenated(), self.name, self.attr)
+    }
+}
+
 
 impl Place {
     /// Generates a unique id for a Place.
