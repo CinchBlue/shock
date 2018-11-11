@@ -17,9 +17,9 @@ start -> workspace
 - workspaces are comprised of a root place and a set of other reachable sub places that never loop into themselves
 - packages are sort of like "mini workspaces" that may contain each other I guess?
 
-## The Ownership Model
+## The Possession Model
 
-- places own other places.
+- places possess other places.
 - only the root-place owns itself
 - "owning" implies "contains"
 - owners are unique
@@ -83,12 +83,15 @@ start -> workspace
 - We want a flat data structure. To do this, we consider all places as their own nodes in the graph
 - Child nodes are referred to by Locally Unique ID.
 
+```
 procedure fib: Int n -> Int;
     if n less than or equal to 1: return 1;
     else: return n * fib(n-1);
+```
 
 // BECOMES
 
+```
 fib: {
     type: Procedure
     args: [n: Int]
@@ -173,6 +176,7 @@ fib.else.return.expr.rhs: {
         @fib.args.n
     ]
 }
+```
 
 
 Boolean (Bool)
