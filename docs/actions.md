@@ -41,6 +41,7 @@ if cond: <Boolean> then: <Expression> else: <Expression>
 ```
 Evaluates the *then* expression **If** the *cond* expression evaluates to True.
 
+
  
 # Let (let)
 ```
@@ -55,4 +56,11 @@ Evaluate the *be* expression and **Let** the *name* be bound to that in the
 create type: <PlaceType> as: <String> at: <Path>
 ```
 **Create** a *type* in place *at* the given path.
+
+
+# Construct (cons)
+```
+construct type: <Type> with: <Argument-List>
+```
+**Constructs** a literal Type *with* the arguments in place.
 
