@@ -1,205 +1,17 @@
 extern crate shock;
 extern crate rustyline;
 
-use shock::parser::vec_to_string;
+use shock::parser::{primitive_value, boolean, integer_decimal, ShockEditorContext, parse, vec_to_string};
+use shock::model::{PrimitiveData, PlaceData, Place};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
+use std::collections::HashMap;
 
 #[macro_use]
 extern crate nom;
 
-use shock::model::{Place, PrimitiveData, PlaceData};
-use std::collections::HashMap;
-use shock::model::Path;
-
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
-use shock::parser::{identifier, to_s};
-use nom::{digit, is_space};
-
-#[derive(Debug)]
-enum EditorCommandKeyword {
-    Show,
-    Construct,
-    Delete,
-    Put,
-    Focus
-}
-
-enum EditorCommand {
-    SHOW(Path),
-    CONSTRUCT(Path, PrimitiveData),
-    DELETE(Path),
-    UPDATE(Path, PrimitiveData),
-    FOCUS(Path),
-}
-
-#[derive(Debug)]
-struct Command {
-    name: String,
-    args: Vec<(String, ExpressionValue)>
-}
-
-#[derive(Debug)]
-enum ExpressionValue {
-    Primitive(PrimitiveData),
-    Expression(Command),
-    Block(Vec<Command>),
-}
-
-fn is_linespace(chr: u8) -> bool { chr == b' ' || chr == b'\t' }
-
-named!(space, take_while1!(is_space));
-named!(linespace, take_while1!(is_linespace));
-named!(keyword_show, alt!(tag!("show") | tag!("sh")));
-named!(keyword_construct, alt!(tag!("construct") | tag!("cons")));
-named!(keyword_delete, alt!(tag!("delete") | tag!("del")));
-named!(keyword_put, alt!(tag!("put")));
-named!(keyword_focus, alt!(tag!("focus") | tag!("fs")));
-
-named!(editor_command_keyword<EditorCommandKeyword>,
-    alt_complete!(
-        keyword_show        => { |_| EditorCommandKeyword::Show } |
-        keyword_construct   => { |_| EditorCommandKeyword::Construct } |
-        keyword_delete      => { |_| EditorCommandKeyword::Delete } |
-        keyword_put         => { |_| EditorCommandKeyword::Put } |
-        keyword_focus       => { |_| EditorCommandKeyword::Focus }
-    )
-);
-
-named!(sign, recognize!(opt!(one_of!("+-"))));
-named!(integer_decimal_literal, recognize!(do_parse!(sign >> digit >> ())));
-named!(integer_decimal<i64>,
-    map_res!(
-        map_res!(integer_decimal_literal, std::str::from_utf8),
-        |s| i64::from_str_radix(s, 10)
-    )
-);
-named!(boolean<bool>, alt!(
-    tag!("true") => { |_| true } |
-    tag!("false") => { |_| false }
-));
-
-named!(operator_initial<char>, one_of!(",.><+-=|^%~?"));
-named!(operator_subsequent<char>, one_of!(":,.><+-=|^%~?"));
-named!(operator_identifier<String>,
-    do_parse!(
-        initial: many_m_n!(1, 1, operator_initial) >>
-        subsequent: many_m_n!(0, 32, operator_subsequent) >>
-        (
-            (||{
-                initial.iter().chain(&subsequent).cloned().collect()
-            })()
-        )
-    )
-);
-
-named!(
-    string_content<String>,
-    map!(
-        escaped_transform!(
-            take_until_either!("\"\\"),
-            '\\',
-            alt!(
-                tag!("\\") => { |_| &b"\\"[..] } |
-                tag!("\"") => { |_| &b"\""[..] } |
-                tag!("n") => { |_| &b"\n"[..] } |
-                tag!("r") => { |_| &b"\r"[..] } |
-                tag!("t") => { |_| &b"\t"[..] }
-            )
-        ),
-        to_s
-    )
-);
-named!(string<String>, delimited!(tag!("\""), string_content, tag!("\"")));
-
-named!(primitive_value<PrimitiveData>,
-    alt_complete!(
-        integer_decimal     => { |i| PrimitiveData::Int(i) } |
-        boolean             => { |b| PrimitiveData::Bool(b) } |
-        string              => { |s| PrimitiveData::String(s) } |
-        identifier          => { |n| PrimitiveData::Name(n) }
-    )
-);
-
-named!(expression_value<ExpressionValue>,
-    alt_complete!(
-        primitive_value => { |val| ExpressionValue::Primitive(val) } |
-        command_expression => { |val| ExpressionValue::Expression(val) }
-    )
-);
-
-named!(command_argument_pair<(String, ExpressionValue)>,
-   do_parse!(
-        name: alt!(
-            operator_identifier |
-            terminated!(identifier, tag!(":"))
-        ) >>
-        linespace >>
-        value: expression_value >>
-        ((name, value))
-   )
-);
-
-named!(command_arguments<Vec<(String, ExpressionValue)>>,
-    many1!(alt_complete!(
-        preceded!(opt!(linespace), command_argument_pair)
-            => { |val| val } |
-        preceded!(opt!(linespace), expression_value)
-            => {|val| ("".to_owned(), val) }
-    ))
-);
-
-named!(command<Command>, do_parse!(
-    opt!(linespace) >>
-    command_name: alt!(identifier | operator_identifier)  >>
-    opt!(linespace) >>
-    arguments: command_arguments >>
-    opt!(linespace) >>
-    peek!(one_of!("\r\n;)")) >>
-    (Command {name: command_name, args: arguments})
-));
-
-named!(command_expression<Command>,
-    alt!(
-        delimited!(char!('('), command, char!(')'))
-    )
-);
-
-named!(commands<Vec<Command>>, many0!(
-    alt!(
-        terminated!(command, one_of!("\r\n;")) |
-        command_expression
-    )
-));
-
-
-struct ShockEditorContext {
-    level: u32
-}
-
-fn parse(line: &str) -> Result<(&[u8], Vec<Command>), nom::Err<&[u8]>> {
-     commands(line.as_bytes())
-}
-
-macro_rules! assert_correct_parse {
-    ($parser: expr, $input: expr, $result: expr) => {
-        assert_eq!(
-            $parser($input.as_bytes()).ok().unwrap().1,
-            $result
-        );
-    }
-}
-
-
 fn main() {
-    assert_correct_parse!(boolean, "true ", true);
-    assert_correct_parse!(boolean, "false ", false);
-    
-    assert_correct_parse!(integer_decimal, "1 ", 1);
-    assert_correct_parse!(integer_decimal, "101 ", 101);
-    assert_correct_parse!(integer_decimal, "+101 ", 101);
-    assert_correct_parse!(integer_decimal, "-101 ", -101);
-    assert_correct_parse!(integer_decimal, "-0 ", 0);
-   
+
     let value = primitive_value("123 ".as_bytes());
     println!("{:?}", value);
     
@@ -214,7 +26,7 @@ fn main() {
         println!("Loaded history.");
     }
     
-    let mut context = ShockEditorContext {level: 0};
+    let mut context = ShockEditorContext::new();
     
     loop {
         let mut line = editor.readline(">> ");
