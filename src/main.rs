@@ -35,7 +35,14 @@ enum EditorCommand {
 #[derive(Debug)]
 struct Command {
     name: String,
-    args: Vec<(String, PrimitiveData)>
+    args: Vec<(String, ExpressionValue)>
+}
+
+#[derive(Debug)]
+enum ExpressionValue {
+    Primitive(PrimitiveData),
+    Expression(Command),
+    Block(Vec<Command>),
 }
 
 fn is_linespace(chr: u8) -> bool { chr == b' ' || chr == b'\t' }
@@ -71,11 +78,17 @@ named!(boolean<bool>, alt!(
     tag!("false") => { |_| false }
 ));
 
-named!(operator_initial<char>, one_of!(",.:><+-=|^%~?"));
+named!(operator_initial<char>, one_of!(",.><+-=|^%~?"));
+named!(operator_subsequent<char>, one_of!(":,.><+-=|^%~?"));
 named!(operator_identifier<String>,
     do_parse!(
-        id: many_m_n!(1, 32, operator_initial) >>
-        (id.into_iter().collect())
+        initial: many_m_n!(1, 1, operator_initial) >>
+        subsequent: many_m_n!(0, 32, operator_subsequent) >>
+        (
+            (||{
+                initial.iter().chain(&subsequent).cloned().collect()
+            })()
+        )
     )
 );
 
@@ -107,37 +120,55 @@ named!(primitive_value<PrimitiveData>,
     )
 );
 
-named!(command_argument_pair<(String, PrimitiveData)>,
+named!(expression_value<ExpressionValue>,
+    alt_complete!(
+        primitive_value => { |val| ExpressionValue::Primitive(val) } |
+        command_expression => { |val| ExpressionValue::Expression(val) }
+    )
+);
+
+named!(command_argument_pair<(String, ExpressionValue)>,
    do_parse!(
-        opt!(linespace) >>
         name: alt!(
-            terminated!(identifier, tag!(":")) |
-            operator_identifier
+            operator_identifier |
+            terminated!(identifier, tag!(":"))
         ) >>
         linespace >>
-        value: primitive_value >>
+        value: expression_value >>
         ((name, value))
    )
 );
 
-named!(command_arguments<Vec<(String, PrimitiveData)>>,
+named!(command_arguments<Vec<(String, ExpressionValue)>>,
     many1!(alt_complete!(
-        preceded!(opt!(linespace), primitive_value)  => { |val| ("".to_owned(), val) } |
-        command_argument_pair                    => { |val| val }
+        preceded!(opt!(linespace), command_argument_pair)
+            => { |val| val } |
+        preceded!(opt!(linespace), expression_value)
+            => {|val| ("".to_owned(), val) }
     ))
 );
 
 named!(command<Command>, do_parse!(
     opt!(linespace) >>
-    command_name: identifier >>
+    command_name: alt!(identifier | operator_identifier)  >>
+    opt!(linespace) >>
     arguments: command_arguments >>
     opt!(linespace) >>
-    one_of!("\t\r\n;") >>
+    peek!(one_of!("\r\n;)")) >>
     (Command {name: command_name, args: arguments})
 ));
 
-named!(commands<Vec<Command>>, many1!(
-    command
+named!(command_expression<Command>,
+    alt!(
+        delimited!(char!('('), command, char!(')'))
+    )
+);
+
+named!(commands<Vec<Command>>, many0!(
+    alt!(
+        terminated!(command, one_of!("\r\n;")) |
+        command_expression
+    )
 ));
 
 
