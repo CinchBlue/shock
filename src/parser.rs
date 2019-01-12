@@ -21,7 +21,7 @@ pub fn to_s(i: Vec<u8>) -> String {
 
 /// Creates a Vec<u8> of identifier-valid characters.
 named!(identifier_consequent,
-    take_while1!(is_identifier_char));
+    take_while!(is_identifier_char));
 
 /// Identifiers must start with lowercase characters.
 named!(identifier_initial,

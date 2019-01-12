@@ -1,6 +1,8 @@
 extern crate shock;
 extern crate rustyline;
 
+use shock::parser::vec_to_string;
+
 #[macro_use]
 extern crate nom;
 
@@ -32,16 +34,19 @@ enum EditorCommand {
 
 #[derive(Debug)]
 struct Command {
-    name: EditorCommandKeyword,
+    name: String,
     args: Vec<(String, PrimitiveData)>
 }
 
+fn is_linespace(chr: u8) -> bool { chr == b' ' || chr == b'\t' }
+
 named!(space, take_while1!(is_space));
+named!(linespace, take_while1!(is_linespace));
 named!(keyword_show, alt!(tag!("show") | tag!("sh")));
 named!(keyword_construct, alt!(tag!("construct") | tag!("cons")));
 named!(keyword_delete, alt!(tag!("delete") | tag!("del")));
 named!(keyword_put, alt!(tag!("put")));
-named!(keyword_focus, alt!(tag!("focus") | tag!("fc")));
+named!(keyword_focus, alt!(tag!("focus") | tag!("fs")));
 
 named!(editor_command_keyword<EditorCommandKeyword>,
     alt_complete!(
@@ -66,6 +71,13 @@ named!(boolean<bool>, alt!(
     tag!("false") => { |_| false }
 ));
 
+named!(operator_initial<char>, one_of!(",.:><+-=|^%~?"));
+named!(operator_identifier<String>,
+    do_parse!(
+        id: many_m_n!(1, 32, operator_initial) >>
+        (id.into_iter().collect())
+    )
+);
 
 named!(
     string_content<String>,
@@ -97,40 +109,44 @@ named!(primitive_value<PrimitiveData>,
 
 named!(command_argument_pair<(String, PrimitiveData)>,
    do_parse!(
-        opt!(space) >>
-        name: identifier >>
-        tag!(":") >>
-        space >>
+        opt!(linespace) >>
+        name: alt!(
+            terminated!(identifier, tag!(":")) |
+            operator_identifier
+        ) >>
+        linespace >>
         value: primitive_value >>
         ((name, value))
    )
 );
 
 named!(command_arguments<Vec<(String, PrimitiveData)>>,
-    many1!(command_argument_pair)
+    many1!(alt_complete!(
+        preceded!(opt!(linespace), primitive_value)  => { |val| ("".to_owned(), val) } |
+        command_argument_pair                    => { |val| val }
+    ))
 );
 
 named!(command<Command>, do_parse!(
-    command_name: editor_command_keyword >>
+    opt!(linespace) >>
+    command_name: identifier >>
     arguments: command_arguments >>
-    one_of!(" \t\r\n;") >>
+    opt!(linespace) >>
+    one_of!("\t\r\n;") >>
     (Command {name: command_name, args: arguments})
 ));
+
+named!(commands<Vec<Command>>, many1!(
+    command
+));
+
 
 struct ShockEditorContext {
     level: u32
 }
 
-fn parse(line: &str) ->
-
-//                     Result<(&[u8], (String, PrimitiveData)), nom::Err<&[u8]>>
-//Result<(&[u8], Vec<(String, PrimitiveData)>), nom::Err<&[u8]>> {
-//                     Result<(&[u8], i64), nom::Err<&[u8]>>
-                     Result<(&[u8], Command), nom::Err<&[u8]>>
-{
-//    integer_decimal(line.as_bytes())
-     command(line.as_bytes())
-//    command_arguments(line.as_bytes())
+fn parse(line: &str) -> Result<(&[u8], Vec<Command>), nom::Err<&[u8]>> {
+     commands(line.as_bytes())
 }
 
 macro_rules! assert_correct_parse {
@@ -175,9 +191,11 @@ fn main() {
         match &mut line {
             Ok(line) => {
                 line.push('\n');
+                line.push('\n');
+                //println!("{:?}", line);
                 editor.add_history_entry(line.as_ref());
                 let result = parse(&line);
-                println!("Result: {:?}", result);
+                println!("{:?}", result.map(|val| { val.1 }));
             },
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
