@@ -1,11 +1,10 @@
 use nom::{take_while1, is_digit, anychar};
 
-use crate::model::{Place, PrimitiveData, PlaceData};
-use std::collections::HashMap;
+use crate::model::{PrimitiveData};
 use crate::model::{Path};
 
 use nom::{digit, is_space};
-
+use std::prelude::v1::Vec;
 
 /// Verifies that a character is an identifier character.
 pub fn is_identifier_char(chr: u8) -> bool {
@@ -91,19 +90,47 @@ pub enum EditorCommand {
     FOCUS(Path),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
-    name: String,
-    args: Vec<(String, ExpressionValue)>,
+    pub name: String,
+    pub args: Vec<(String, ExpressionValue)>,
 }
+
+impl Command {
+    pub fn new() -> Self {
+        Command { name: String::new(), args: Vec::new() }
+    }
+}
+
+pub type ArgumentList = Vec<(String, ExpressionValue)>;
+
+//impl Clone for Command {
+//    fn clone(&self) -> Self {
+//        let mut v: Vec<(String, ExpressionValue)> = Vec::new();
+//        self.args.clone_into(&mut v);
+//        Command {name: self.name.clone(), args: v}
+//    }
+//}
+
+//impl<'a> FromIterator for &'a Command {
+//    fn from_iter<T: IntoIterator<Item=&'a Command>>(iter: T) -> Self {
+//        let mut v: Vec<Command> = Vec::new();
+//
+//        for i in iter {
+//            v.append(i);
+//        }
+//    }
+//}
 
 pub type ExpressionBlock = Vec<Command>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionValue {
     Primitive(PrimitiveData),
     Expression(Command),
     Block(ExpressionBlock),
+    Procedure(ArgumentList, ExpressionBlock),
+    Unit,
 }
 
 pub fn is_linespace(chr: u8) -> bool { chr == b' ' || chr == b'\t' }
@@ -181,6 +208,8 @@ named!(pub primitive_value<PrimitiveData>,
 
 named!(pub expression_value<ExpressionValue>,
     alt_complete!(
+        procedure_expression => { |val| val } |
+        block_expression => { |val| ExpressionValue::Block(val) } |
         primitive_value => { |val| ExpressionValue::Primitive(val) } |
         command_expression => { |val| ExpressionValue::Expression(val) }
     )
@@ -199,7 +228,7 @@ named!(pub command_argument_pair<(String, ExpressionValue)>,
 );
 
 named!(pub command_arguments<Vec<(String, ExpressionValue)>>,
-    many1!(alt_complete!(
+    many0!(alt_complete!(
         preceded!(opt!(linespace), command_argument_pair)
             => { |val| val } |
         preceded!(opt!(linespace), expression_value)
@@ -213,14 +242,12 @@ named!(pub command<Command>, do_parse!(
     opt!(linespace) >>
     arguments: command_arguments >>
     opt!(linespace) >>
-    peek!(one_of!("\r\n;)")) >>
+    peek!(one_of!("\r\n;)}")) >>
     (Command {name: command_name, args: arguments})
 ));
 
 named!(pub command_expression<Command>,
-    alt!(
-        delimited!(char!('('), command, char!(')'))
-    )
+    delimited!(char!('('), command, char!(')'))
 );
 
 named!(pub commands<Vec<Command>>, many0!(
@@ -230,6 +257,39 @@ named!(pub commands<Vec<Command>>, many0!(
     )
 ));
 
+named!(pub expression<ExpressionValue>,
+    alt_complete!(
+        command =>          { |val| ExpressionValue::Expression(val) } |
+        expression_value => { |val| val }
+    )
+);
+
+named!(pub expressions<Vec<ExpressionValue>>, many0!(
+    alt!(
+        terminated!(expression, one_of!("\r\n;")) |
+        expression
+    )
+));
+
+named!(pub block_commands<Vec<Command>>,
+    separated_list!(delimited!(opt!(linespace), one_of!("\r\n;"), opt!(linespace)), alt!(command | command_expression))
+);
+
+named!(pub block_expression<Vec<Command>>,
+    delimited!(char!('{'), block_commands, char!('}')));
+
+named!(pub argument_list<Vec<(String, ExpressionValue)>>,
+    delimited!(char!('['), command_arguments, preceded!(opt!(linespace), char!(']'))));
+
+named!(pub procedure_expression<ExpressionValue>,
+    do_parse!(
+        opt!(linespace) >>
+        args: argument_list >>
+        opt!(linespace) >>
+        body: block_expression >>
+        (ExpressionValue::Procedure(args, body))
+    )
+);
 
 pub struct ShockEditorContext {
     level: u32
@@ -241,8 +301,14 @@ impl ShockEditorContext {
     }
 }
 
-pub fn parse(line: &str) -> Result<(&[u8], Vec<Command>), nom::Err<&[u8]>> {
-     commands(line.as_bytes())
+pub fn parse(line: &str) ->
+                            Result<(&[u8], Vec<ExpressionValue>), nom::Err<&[u8]>>
+//                         Result<(&[u8], Vec<Command>), nom::Err<&[u8]>>
+                         //Result<(&[u8], Command), nom::Err<&[u8]>>
+{
+    expressions(line.as_bytes())
+//     commands(line.as_bytes())
+//    command(line.as_bytes())
 }
 
 macro_rules! assert_correct_parse {
