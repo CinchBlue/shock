@@ -311,17 +311,19 @@ pub fn parse(line: &str) ->
 //    command(line.as_bytes())
 }
 
-macro_rules! assert_correct_parse {
-    ($parser: expr, $input: expr, $result: expr) => {
-        assert_eq!(
-            $parser($input.as_bytes()).ok().unwrap().1,
-            $result
-        );
-    }
-}
+
 
 #[cfg(test)]
 mod tests {
+    
+    macro_rules! assert_correct_parse {
+        ($parser: expr, $input: expr, $result: expr) => {
+            assert_eq!(
+                $parser($input.as_bytes()).ok().unwrap().1,
+                $result
+            );
+        }
+    }
     
     #[test]
     fn it_works() {

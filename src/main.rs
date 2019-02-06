@@ -33,15 +33,16 @@ fn main() {
     
     let mut context = ShockEditorContext::new();
     let mut vm = Arc::new(Mutex::new(VM {
-        curr_scope: VMScope {
+        curr_scope: Arc::new(Mutex::new(VMScope {
             vars: Arc::new(Mutex::new(HashMap::new())),
             args: Vec::new(),
             acc: Value::Unit,
-            parent: &None,
-            child: Box::new(None),
-        },
+            parent: None,
+            child: None,
+        })),
         curr_expr: ExpressionValue::Unit,
     }));
+    vm.lock().unwrap().define_standard_functions();
     
     loop {
         let mut line = editor.readline(">> ");
