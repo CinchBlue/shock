@@ -1,7 +1,6 @@
 use nom::{take_while1, is_digit, anychar};
 
 use crate::model::{PrimitiveData};
-use crate::model::{Path};
 
 use nom::{digit, is_space};
 use std::prelude::v1::Vec;
@@ -14,6 +13,10 @@ pub fn is_identifier_char(chr: u8) -> bool {
 /// Verifies that a character is a ASCII lowercase character.
 pub fn is_lowercase_alpha(chr: u8) -> bool {
     chr.is_ascii_lowercase()
+}
+
+pub fn is_identifier_initial(chr: u8) -> bool {
+    chr == b'_' || chr.is_ascii_alphabetic()
 }
 
 /// Transform a vector into a string.
@@ -31,7 +34,7 @@ named!(pub identifier_consequent,
 
 /// Identifiers must start with lowercase characters.
 named!(pub identifier_initial,
-    take_while_m_n!(1, 1, is_lowercase_alpha));
+    take_while_m_n!(1, 1, is_identifier_initial));
 
 /// Identifiers must start with lowercase characters and can then be followed up with
 /// alphanumeric characters or dashes or underscores.
@@ -73,58 +76,18 @@ named!(pub integer<String>,
     )
 );
 
-#[derive(Debug)]
-pub enum EditorCommandKeyword {
-    Show,
-    Construct,
-    Delete,
-    Put,
-    Focus
-}
 
-pub enum EditorCommand {
-    SHOW(Path),
-    CONSTRUCT(Path, PrimitiveData),
-    DELETE(Path),
-    UPDATE(Path, PrimitiveData),
-    FOCUS(Path),
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Command {
     pub name: String,
     pub args: Vec<(String, ExpressionValue)>,
 }
 
-impl Command {
-    pub fn new() -> Self {
-        Command { name: String::new(), args: Vec::new() }
-    }
-}
-
 pub type ArgumentList = Vec<(String, ExpressionValue)>;
-
-//impl Clone for Command {
-//    fn clone(&self) -> Self {
-//        let mut v: Vec<(String, ExpressionValue)> = Vec::new();
-//        self.args.clone_into(&mut v);
-//        Command {name: self.name.clone(), args: v}
-//    }
-//}
-
-//impl<'a> FromIterator for &'a Command {
-//    fn from_iter<T: IntoIterator<Item=&'a Command>>(iter: T) -> Self {
-//        let mut v: Vec<Command> = Vec::new();
-//
-//        for i in iter {
-//            v.append(i);
-//        }
-//    }
-//}
 
 pub type ExpressionBlock = Vec<Command>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionValue {
     Primitive(PrimitiveData),
     Expression(Command),
@@ -143,16 +106,6 @@ named!(pub keyword_delete, alt!(tag!("delete") | tag!("del")));
 named!(pub keyword_put, alt!(tag!("put")));
 named!(pub keyword_focus, alt!(tag!("focus") | tag!("fs")));
 
-named!(pub editor_command_keyword<EditorCommandKeyword>,
-    alt_complete!(
-        keyword_show        => { |_| EditorCommandKeyword::Show } |
-        keyword_construct   => { |_| EditorCommandKeyword::Construct } |
-        keyword_delete      => { |_| EditorCommandKeyword::Delete } |
-        keyword_put         => { |_| EditorCommandKeyword::Put } |
-        keyword_focus       => { |_| EditorCommandKeyword::Focus }
-    )
-);
-
 named!(pub sign, recognize!(opt!(one_of!("+-"))));
 named!(pub integer_decimal_literal, recognize!(do_parse!(sign >> digit >> ())));
 named!(pub integer_decimal<i64>,
@@ -166,7 +119,7 @@ named!(pub boolean<bool>, alt!(
     tag!("false") => { |_| false }
 ));
 
-named!(pub operator_initial<char>, one_of!(",.><+-=|^%~?"));
+named!(pub operator_initial<char>, one_of!(",.><+-=|^%~?*/"));
 named!(pub operator_subsequent<char>, one_of!(":,.><+-=|^%~?"));
 named!(pub operator_identifier<String>,
     do_parse!(
@@ -199,10 +152,10 @@ named!(pub
 );
 named!(pub primitive_value<PrimitiveData>,
     alt_complete!(
+        identifier          => { |n| PrimitiveData::Name(n) } |
         integer_decimal     => { |i| PrimitiveData::Int(i) } |
         boolean             => { |b| PrimitiveData::Bool(b) } |
-        string              => { |s| PrimitiveData::String(s) } |
-        identifier          => { |n| PrimitiveData::Name(n) }
+        string              => { |s| PrimitiveData::String(s) }
     )
 );
 
@@ -210,16 +163,16 @@ named!(pub expression_value<ExpressionValue>,
     alt_complete!(
         procedure_expression => { |val| val } |
         block_expression => { |val| ExpressionValue::Block(val) } |
-        primitive_value => { |val| ExpressionValue::Primitive(val) } |
-        command_expression => { |val| ExpressionValue::Expression(val) }
+        command_expression => { |val| ExpressionValue::Expression(val) } |
+        primitive_value => { |val| ExpressionValue::Primitive(val) }
     )
 );
 
 named!(pub command_argument_pair<(String, ExpressionValue)>,
    do_parse!(
         name: alt!(
-            operator_identifier |
-            terminated!(identifier, tag!(":"))
+            terminated!(identifier, tag!(":")) |
+            operator_identifier
         ) >>
         linespace >>
         value: expression_value >>
@@ -228,13 +181,20 @@ named!(pub command_argument_pair<(String, ExpressionValue)>,
 );
 
 named!(pub command_arguments<Vec<(String, ExpressionValue)>>,
-    many0!(alt_complete!(
+    separated_list!(linespace, alt_complete!(
         preceded!(opt!(linespace), command_argument_pair)
             => { |val| val } |
         preceded!(opt!(linespace), expression_value)
             => {|val| ("".to_owned(), val) }
     ))
 );
+
+named!(pub argument_list<Vec<(String, ExpressionValue)>>,
+    delimited!(
+        char!('['),
+        many0!(preceded!(opt!(linespace), command_argument_pair)),
+        char!(']')
+    ));
 
 named!(pub command<Command>, do_parse!(
     opt!(linespace) >>
@@ -278,9 +238,6 @@ named!(pub block_commands<Vec<Command>>,
 named!(pub block_expression<Vec<Command>>,
     delimited!(char!('{'), block_commands, char!('}')));
 
-named!(pub argument_list<Vec<(String, ExpressionValue)>>,
-    delimited!(char!('['), command_arguments, preceded!(opt!(linespace), char!(']'))));
-
 named!(pub procedure_expression<ExpressionValue>,
     do_parse!(
         opt!(linespace) >>
@@ -291,24 +248,10 @@ named!(pub procedure_expression<ExpressionValue>,
     )
 );
 
-pub struct ShockEditorContext {
-    level: u32
-}
-
-impl ShockEditorContext {
-    pub fn new() -> Self {
-        ShockEditorContext { level: 0 }
-    }
-}
-
-pub fn parse(line: &str) ->
-                            Result<(&[u8], Vec<ExpressionValue>), nom::Err<&[u8]>>
-//                         Result<(&[u8], Vec<Command>), nom::Err<&[u8]>>
-                         //Result<(&[u8], Command), nom::Err<&[u8]>>
+pub fn parse(line: &str)
+    -> Result<(&[u8], Vec<ExpressionValue>), nom::Err<&[u8]>>
 {
     expressions(line.as_bytes())
-//     commands(line.as_bytes())
-//    command(line.as_bytes())
 }
 
 
@@ -318,9 +261,13 @@ mod tests {
     
     macro_rules! assert_correct_parse {
         ($parser: expr, $input: expr, $result: expr) => {
+            let parsed_value = $parser($input.as_bytes());
+            let original_value = parsed_value.clone();
+            let parsed_value = parsed_value.ok();
+            assert_eq!(true, parsed_value.is_some(), "parsed value did not parse correctly: {:?}", original_value);
             assert_eq!(
-                $parser($input.as_bytes()).ok().unwrap().1,
-                $result
+                $result,
+                parsed_value.unwrap().1,
             );
         }
     }
@@ -329,10 +276,10 @@ mod tests {
     fn it_works() {
         use crate::parser::identifier;
         use crate::parser::character;
-        
-        assert_eq!(identifier(b"abas ").ok().unwrap().1, "abas".to_owned());
-        assert_eq!(identifier(b"--- ").is_err(), true);
-        assert_eq!(character(b"\'a\'bc").ok().unwrap().1, "a".to_owned());
+       
+        assert_correct_parse!(identifier, "x ", "x".to_owned());
+        assert_correct_parse!(identifier, "abas ", "abas".to_owned());
+        assert_correct_parse!(character, "\'a\'bc ", "a".to_owned());
     }
    
     #[test]
@@ -348,6 +295,129 @@ mod tests {
         assert_correct_parse!(integer_decimal, "+101 ", 101);
         assert_correct_parse!(integer_decimal, "-101 ", -101);
         assert_correct_parse!(integer_decimal, "-0 ", 0);
+    }
+    
+    #[test]
+    fn test_argument_list_parsing() {
+        use crate::parser::command_argument_pair;
+        use crate::parser::command_arguments;
+        use crate::parser::argument_list;
+        use crate::parser::ExpressionValue;
+        use crate::model::PrimitiveData;
+        
+        assert_correct_parse!(
+            command_argument_pair,
+            "x: Int ",
+            ("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))
+        );
+        assert_correct_parse!(
+            command_arguments,
+            "x: Int ",
+            vec![("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))]
+        );
+        assert_correct_parse!(
+            argument_list,
+            "[x: Int] ",
+            vec![("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))]
+        );
+        assert_correct_parse!(
+            argument_list,
+            "[x: Int y: String] ",
+            vec![
+                ("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned()))),
+                ("y".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("String".to_owned())))
+            ]
+        );
+        assert_correct_parse!(
+            argument_list,
+            "[x: Int y: String -> String] ",
+            vec![
+                ("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned()))),
+                ("y".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("String".to_owned()))),
+                ("->".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("String".to_owned())))
+            ]
+        );
+    }
+    
+    #[test]
+    fn test_command() {
+        use crate::parser::command;
+        use crate::parser::ExpressionValue;
+        use crate::parser::Command;
+        use crate::model::PrimitiveData;
+        
+        assert_correct_parse!(
+            command,
+            "let x = (+ 1 1) \n",
+            Command {
+                name: "let".to_owned(),
+                args: vec![
+                    ("".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("x".to_owned()))),
+                    ("=".to_owned(), ExpressionValue::Expression(
+                        Command {
+                            name: "+".to_owned(),
+                            args: vec![
+                                ("".to_owned(), ExpressionValue::Primitive(PrimitiveData::Int(1))),
+                                ("".to_owned(), ExpressionValue::Primitive(PrimitiveData::Int(1)))
+                            ]
+                        }
+                    ))
+                ]
+            }
+        );
+        
+    
+        assert_correct_parse!(
+            command,
+            "let x = [x: Int]{} \n",
+            Command {
+                name: "let".to_owned(),
+                args: vec![
+                    ("".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("x".to_owned()))),
+                    ("=".to_owned(), ExpressionValue::Procedure(
+                        vec![
+                            ("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))
+                        ],
+                        vec![]
+                    ))
+                ]
+            }
+        );
+    }
+    
+    
+    #[test]
+    fn test_expression_value() {
+        use crate::parser::expression;
+        use crate::parser::ExpressionValue;
+        use crate::parser::Command;
+        use crate::model::PrimitiveData;
+        
+        assert_correct_parse!(
+            expression,
+            "[x: Int]{} ",
+            ExpressionValue::Procedure(
+                vec![
+                    ("x".to_owned(),
+                        ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))
+                ],
+                vec![]
+            )
+        );
+        assert_correct_parse!(
+            expression,
+            "(let x = 1) ",
+            ExpressionValue::Expression(
+                Command {
+                    name: "let".to_owned(),
+                    args: vec![
+                        ("".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("x".to_owned()))),
+                        ("=".to_owned(), ExpressionValue::Primitive(PrimitiveData::Int(1)))
+                    ]
+                }
+            )
+        );
+       
     }
 }
 

@@ -1,7 +1,7 @@
 extern crate shock;
 extern crate rustyline;
 
-use shock::parser::{ExpressionValue, primitive_value, boolean, integer_decimal, ShockEditorContext, parse,
+use shock::parser::{ExpressionValue, primitive_value, boolean, integer_decimal, parse,
                     vec_to_string};
 use shock::model::{PrimitiveData, PlaceData, Place};
 use shock::interpreter::{VM, VMScope, Value, eval};
@@ -31,7 +31,6 @@ fn main() {
         println!("Loaded history.");
     }
     
-    let mut context = ShockEditorContext::new();
     let mut vm = Arc::new(Mutex::new(VM {
         curr_scope: Arc::new(Mutex::new(VMScope {
             vars: Arc::new(Mutex::new(HashMap::new())),
@@ -52,13 +51,16 @@ fn main() {
                 editor.add_history_entry(line.as_ref());
                 line.push('\n');
                 line.push('\n');
-                //println!("{:?}", line);
-                let mut result = parse(&line).map(
+                let result = parse(&line).map(
                     |val| { val.1 }
-                ).unwrap();
-                println!("PARSED: {:?}", result.get(0));
-                let mut value = eval(&vm, result.get(0).unwrap());
-                println!("EVAL: {:?}", value);
+                );
+//                println!("PARSED: {:?}", result);
+                let result = result.unwrap();
+                let value = match result.get(0) {
+                    None => &ExpressionValue::Unit,
+                    Some(val) => val,
+                };
+                println!("<< {:?}", eval(&vm, value));
             },
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
