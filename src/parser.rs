@@ -38,13 +38,16 @@ named!(pub identifier_initial,
 
 /// Identifiers must start with lowercase characters and can then be followed up with
 /// alphanumeric characters or dashes or underscores.
-named!(pub identifier<String>,
+named!(pub simple_identifier<String>,
     do_parse!(
         initial: identifier_initial >>
         rest: identifier_consequent >>
         (vec_to_string(initial) + &String::from_utf8_lossy(rest).into_owned())
     )
 );
+
+named!(pub identifier<String>,
+    alt!(simple_identifier | backquoted_identifier | operator_identifier));
 
 /// A string is between double quotes.
 named!(pub string<String>,
@@ -53,6 +56,15 @@ named!(pub string<String>,
         string_contents: take_until!("\"") >>
         tag!("\"")
         >>
+        (vec_to_string(string_contents))
+    )
+);
+
+named!(pub backquoted_identifier<String>,
+    do_parse!(
+        tag!("`")  >>
+        string_contents: take_until!("`") >>
+        tag!("`")  >>
         (vec_to_string(string_contents))
     )
 );
@@ -84,8 +96,9 @@ pub struct Command {
 }
 
 pub type ArgumentList = Vec<(String, ExpressionValue)>;
-
 pub type ExpressionBlock = Vec<Command>;
+pub type PathComponents = Vec<String>;
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionValue {
@@ -93,6 +106,7 @@ pub enum ExpressionValue {
     Expression(Command),
     Block(ExpressionBlock),
     Procedure(ArgumentList, ExpressionBlock),
+    Path(PathComponents),
     Unit,
 }
 
@@ -119,7 +133,7 @@ named!(pub boolean<bool>, alt!(
     tag!("false") => { |_| false }
 ));
 
-named!(pub operator_initial<char>, one_of!(",.><+-=|^%~?*/"));
+named!(pub operator_initial<char>, one_of!(",><+-=|^%~?*/"));
 named!(pub operator_subsequent<char>, one_of!(":,.><+-=|^%~?"));
 named!(pub operator_identifier<String>,
     do_parse!(
@@ -164,6 +178,7 @@ named!(pub expression_value<ExpressionValue>,
         procedure_expression => { |val| val } |
         block_expression => { |val| ExpressionValue::Block(val) } |
         command_expression => { |val| ExpressionValue::Expression(val) } |
+        path_expression => { |val| ExpressionValue::Path(val) } |
         primitive_value => { |val| ExpressionValue::Primitive(val) }
     )
 );
@@ -248,6 +263,27 @@ named!(pub procedure_expression<ExpressionValue>,
     )
 );
 
+named!(pub path_expression<Vec<String>>,
+    alt_complete!(
+        do_parse!(
+            component_list: many1!(
+                preceded!(tag!("."),
+                    do_parse!(
+                        maybe_ident: opt!(identifier) >>
+                        (match maybe_ident {
+                            None => "".to_string(),
+                            Some(v) => v,
+                        })
+                    )
+                )
+            ) >>
+            (component_list)
+        ) => { |list| list } |
+        tag!(".") => { |s| vec![] }
+    )
+);
+
+
 pub fn parse(line: &str)
     -> Result<(&[u8], Vec<ExpressionValue>), nom::Err<&[u8]>>
 {
@@ -312,7 +348,7 @@ mod tests {
         );
         assert_correct_parse!(
             command_arguments,
-            "x: Int ",
+            "x: Int \n",
             vec![("x".to_owned(), ExpressionValue::Primitive(PrimitiveData::Name("Int".to_owned())))]
         );
         assert_correct_parse!(

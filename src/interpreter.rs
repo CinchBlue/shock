@@ -63,6 +63,7 @@ pub enum Value {
     Primitive(PrimitiveData),
     Procedure(Procedure),
     NativeProcedure(NativeProcedure),
+    Path(Vec<String>),
 }
 
 
@@ -95,6 +96,10 @@ impl VMScope {
             },
             Some(val) => Some(val.clone()),
         }
+    }
+    
+    pub fn lookup_direct_value(&self, name: &str) -> Option<Value> {
+        self.vars.lock().unwrap().get(name).cloned()
     }
     
     pub fn set_value(&self, name: &str, val: &Value) {
@@ -153,6 +158,7 @@ mod nativelib {
     }
     
     pub fn shock_get(args: Vec<(String, Value)>, vm: &Arc<Mutex<VM>>) -> Value {
+        if args.len() < 0 || args.len() >= 2 { return Value::Unit; }
         let var_name = extract_first_argname(&args, 0);
         println!("GET {:?}", var_name);
         match vm.lock().unwrap().curr_scope.lock().unwrap().lookup_value(var_name.as_ref()) {
@@ -178,6 +184,12 @@ mod nativelib {
                     PrimitiveData::Int(v) => *v as f64,
                     PrimitiveData::Float(v) => *v as f64,
                     _ => 0.0,
+                },
+                Value::Path(path_components) => {
+                    match vm.lock().unwrap().lookup_path(path_components) {
+                        None => 0.0,
+                        Some(value) => to_float(&value, vm),
+                    }
                 },
                 _ => 0.0
             }
@@ -255,6 +267,43 @@ impl VM {
             panic!("Cannot pop a scope from the scope stack because there is no scopes to pop!");
         }
     }
+    
+    pub fn get_parent_scope(&self) -> Option<Arc<Mutex<VMScope>>> {
+        self.curr_scope.lock().unwrap().parent.clone()
+    }
+    
+    pub fn get_current_scope(&self) -> Arc<Mutex<VMScope>> {
+        self.curr_scope.clone()
+    }
+
+    pub fn lookup_direct_value(&self, name: &str) -> Option<Value> {
+        self.curr_scope.lock().unwrap().lookup_direct_value(name)
+    }
+    
+    pub fn lookup_path(&self, path: &Vec<String>) -> Option<&Value> {
+        let mut final_value = None;
+        let mut current_scope = self.get_current_scope();
+        for part in path {
+            if part.is_empty() {
+                let parent_scope = self.get_parent_scope();
+                match parent_scope {
+                    None => return None,
+                    Some(scope) => current_scope = scope,
+                }
+            } else {
+                let final_value = self.lookup_direct_value(&part);
+                match final_value {
+                    None => return None,
+                    Some(value) => match value {
+                        Value::Procedure(procedure) =>
+                            current_scope = procedure.scope.clone(),
+                        _ => return None,
+                    },
+                }
+            }
+        }
+        final_value
+    }
 }
 
 pub fn eval(
@@ -275,6 +324,17 @@ pub fn eval_impl(
     reference_variables: bool) -> Value {
     println!("EVAL with referencing = {} on {:?}", reference_variables, expr);
     match expr {
+        ExpressionValue::Path(path_components) => {
+            println!("Path: {:?}", path_components);
+            if reference_variables {
+                match vm.lock().unwrap().lookup_path(path_components) {
+                    None => Value::Unit,
+                    Some(value) => value.clone(),
+                }
+            } else {
+                Value::Path(path_components.clone())
+            }
+        },
         ExpressionValue::Primitive(primitive_data) => {
             println!("Primitive: {:?}", primitive_data);
             match primitive_data {
