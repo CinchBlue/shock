@@ -3,6 +3,8 @@ extern crate uuid;
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Formatter;
+use std::fmt::Error;
 
 /// Represents the different types of "stand-alone" primitive data.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +30,30 @@ pub struct Place {
 }
 
 /// All places on a given Shock server have a unique id number.
-pub type PlaceId = uuid::Uuid;
+#[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct PlaceId {
+    id: uuid::Uuid,
+}
+
+impl PlaceId {
+    fn new() -> PlaceId {
+        PlaceId { id: uuid::Uuid::new_v4() }
+    }
+}
+
+impl fmt::Debug for PlaceId {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        //write!(f, "PlaceId{{ {:?} }}", self.id.to_simple().to_string())
+        write!(f, "\"{}\"", self.id.to_simple().to_string())
+    }
+}
+
+impl fmt::Display for PlaceId {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "\"{}\"", self.id.to_simple().to_string())
+    }
+}
+//pub type PlaceId = uuid::Uuid;
 
 /// Attributes on Places can either be another Place, or primitive data.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,13 +64,13 @@ pub enum AttributeData {
 
 impl Clone for Place {
     fn clone(&self) -> Self {
-        Place { id: Place::generate_id(), attr: self.attr.clone()}
+        Place { id: self.id.clone(), attr: self.attr.clone()}
     }
 }
 
 impl fmt::Debug for Place {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "primitive {{ id: {}, attr: {:?} }}", self.id.to_hyphenated(), self.attr)
+        write!(f, "Place {{ id: {}, attr: {:?} }}", self.id, self.attr)
     }
 }
 
@@ -54,12 +79,16 @@ impl Place {
     ///
     /// NOTE: Not sure if this should be unique across just the primitive type or all objects.
     pub fn generate_id() -> PlaceId {
-        Uuid::new_v4()
+        PlaceId::new()
     }
     
     /// Constructs a new primitive.
     pub fn new(id: PlaceId, attr: HashMap<String, AttributeData>) -> Self {
         Place{id, attr}
+    }
+    
+    pub fn generate_new() -> Self {
+        Place::new(Place::generate_id(), HashMap::new())
     }
     
     /// Checks whether if the primitive contains the key as an attribute.
@@ -76,6 +105,7 @@ impl Place {
     pub fn put_attr(&mut self, key: String, value: AttributeData) {
         self.attr.insert(key, value);
     }
+    
     
     /// Get the key's value from the primitive, and create a new primitive from it.
     pub fn reify_attr(&mut self, key: &String, id: PlaceId) -> Option<Place> {
