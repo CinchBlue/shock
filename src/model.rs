@@ -36,45 +36,45 @@ impl Clone for Place {
 
 impl fmt::Debug for Place {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "place {{ id: {}, name: {}, attr: {:?} }}", self.id.to_hyphenated(), self.name, self.attr)
+        write!(f, "primitive {{ id: {}, name: {}, attr: {:?} }}", self.id.to_hyphenated(), self.name, self.attr)
     }
 }
 
 
 impl Place {
-    /// Generates a unique id for a place.
+    /// Generates a unique id for a primitive.
     ///
-    /// NOTE: Not sure if this should be unique across just the place type or all objects.
+    /// NOTE: Not sure if this should be unique across just the primitive type or all objects.
     pub fn generate_id() -> PlaceId {
         Uuid::new_v4()
     }
     
-    /// Constructs a new place.
+    /// Constructs a new primitive.
     pub fn new(name: String, attr: HashMap<String, PlaceData>) -> Self {
         Place{id: Place::generate_id(), name, attr}
     }
     
-    /// Checks whether if the place contains the key as an attribute.
+    /// Checks whether if the primitive contains the key as an attribute.
     pub fn contains_key(&self, key: String) -> bool {
         self.attr.contains_key(&key)
     }
     
-    /// Immutable get from a place's attribute map by key.
+    /// Immutable get from a primitive's attribute map by key.
     pub fn get_attr(&self, key: String) -> Option<&PlaceData> {
         self.attr.get(&key)
     }
     
-    /// Idempotent put into a place's attribute map by key.
+    /// Idempotent put into a primitive's attribute map by key.
     pub fn put_attr(&mut self, key: String, value: PlaceData) {
         self.attr.insert(key, value);
     }
     
-    /// Get the key's value from the place, and create a new place from it.
+    /// Get the key's value from the primitive, and create a new primitive from it.
     pub fn reify_attr(&mut self, name: String, key: String) -> Place {
         match self.attr.get(key.as_str()) {
             // If no key, do not create it with a value key.
             None => Place {id: Place::generate_id(), name, attr: HashMap::new() },
-            // If key, create the place with a single attribute named "value".
+            // If key, create the primitive with a single attribute named "value".
             Some(place_data) => {
                 let mut attribute_map: HashMap<String, PlaceData> = HashMap::new();
                 attribute_map.insert(String::from("value"), place_data.clone());
