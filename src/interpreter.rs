@@ -125,10 +125,7 @@ impl VMScope {
     }
 }
 
-pub struct VM {
-    pub curr_scope: Arc<Mutex<VMScope>>,
-    pub curr_expr: ExpressionValue,
-}
+
 
 mod nativelib {
     use std::sync::Arc;
@@ -230,6 +227,11 @@ mod nativelib {
         numeric_op_impl!(div, /);
         numeric_op_impl!(modulo, %);
     }
+}
+
+pub struct VM {
+    pub curr_scope: Arc<Mutex<VMScope>>,
+    pub curr_expr: ExpressionValue,
 }
 
 impl VM {

@@ -86,7 +86,7 @@ fn main() {
     
     println!("{:?}", p);
     
-    p.put_attr("type".to_string(), PlaceData::Data(PrimitiveData::String("Place".to_string())));
+    p.put_attr("type".to_string(), PlaceData::Data(PrimitiveData::String("place".to_string())));
     
     println!("{:?}", p);
     

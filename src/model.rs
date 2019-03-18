@@ -16,7 +16,7 @@ pub enum PrimitiveData {
 
 #[derive(Debug, Clone)]
 pub enum PlaceData {
-    Place(Place),
+    Place(PlaceId),
     Data(PrimitiveData),
 }
 
@@ -36,40 +36,40 @@ impl Clone for Place {
 
 impl fmt::Debug for Place {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Place {{ id: {}, name: {}, attr: {:?} }}", self.id.to_hyphenated(), self.name, self.attr)
+        write!(f, "place {{ id: {}, name: {}, attr: {:?} }}", self.id.to_hyphenated(), self.name, self.attr)
     }
 }
 
 
 impl Place {
-    /// Generates a unique id for a Place.
+    /// Generates a unique id for a place.
     ///
-    /// NOTE: Not sure if this should be unique across just the Place type or all objects.
+    /// NOTE: Not sure if this should be unique across just the place type or all objects.
     pub fn generate_id() -> PlaceId {
         Uuid::new_v4()
     }
     
-    /// Constructs a new Place.
+    /// Constructs a new place.
     pub fn new(name: String, attr: HashMap<String, PlaceData>) -> Self {
         Place{id: Place::generate_id(), name, attr}
     }
     
-    /// Checks whether if the Place contains the key as an attribute.
+    /// Checks whether if the place contains the key as an attribute.
     pub fn contains_key(&self, key: String) -> bool {
         self.attr.contains_key(&key)
     }
     
-    /// Immutable get from a Place's attribute map by key.
+    /// Immutable get from a place's attribute map by key.
     pub fn get_attr(&self, key: String) -> Option<&PlaceData> {
         self.attr.get(&key)
     }
     
-    /// Idempotent put into a Place's attribute map by key.
+    /// Idempotent put into a place's attribute map by key.
     pub fn put_attr(&mut self, key: String, value: PlaceData) {
         self.attr.insert(key, value);
     }
     
-    /// Get the key's value from the Place, and create a new Place from it.
+    /// Get the key's value from the place, and create a new place from it.
     pub fn reify_attr(&mut self, name: String, key: String) -> Place {
         match self.attr.get(key.as_str()) {
             // If no key, do not create it with a value key.
@@ -105,10 +105,4 @@ impl fmt::Display for Path {
         let path_string = self.name_list.join(".");
         write!(f, "{}", path_string)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct FocusContext<'a> {
-    path: Path,
-    place: &'a Place,
 }
