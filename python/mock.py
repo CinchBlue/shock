@@ -18,7 +18,7 @@ class Place:
         place_value = '"{}"'.format(self.attr['name']) \
             if 'name' in self.attr \
             else (self.attr['value'] if 'value' in self.attr else '?')
-        return '{}: {}'.format(place_type, place_value)
+        return '({}): {}'.format(place_type, place_value, self.id)
 
     def __repr__(self) -> str:
         return "P[{}] {}".format(
@@ -31,31 +31,31 @@ class Link:
 
     def __init__(
             self,
-            from_place: uuid.UUID,
-            to_place: uuid.UUID,
+            src_place_id: uuid.UUID,
+            dest_place_id: uuid.UUID,
             name: str,
             **kwargs):
         self.id = uuid.uuid4()
-        self.from_place = from_place
-        self.to_place = to_place
+        self.src_place_id = src_place_id
+        self.dest_place_id = dest_place_id
         self.name = name
         self.attr = {}
         for key, value in kwargs.items():
             self.attr[key] = value
 
     def __str__(self):
-        return "L[{}] ({}) {} => {} => {} {}".format(
+        return "L[{}] ({}) {} => {} {}".format(
             self.id,
             self.name,
-            self.from_place,
-            self.to_place,
+            self.src_place_id,
+            self.dest_place_id,
             self.attr)
 
     def __repr__(self):
         return "({}) {} -> {}".format(
             self.name,
-            self.from_place,
-            self.to_place)
+            self.src_place_id,
+            self.dest_place_id)
 
 
 class GraphStore:
@@ -77,19 +77,19 @@ class GraphStore:
             del self.places[place_id]
 
     def insert_link(self, link: Link):
-        if (link.from_place in self.places.keys() and
-                link.to_place in self.places.keys()):
+        if (link.src_place_id in self.places.keys() and
+                link.dest_place_id in self.places.keys()):
             # Insert in the link_by_id dict
             self.links[link.id] = link
 
             # Insert link_by_id into dict
-            if not (link.from_place in self.links_by_from):
-                self.links_by_from[link.from_place] = {}
-            self.links_by_from[link.from_place][link.id] = link
+            if not (link.src_place_id in self.links_by_from):
+                self.links_by_from[link.src_place_id] = {}
+            self.links_by_from[link.src_place_id][link.id] = link
 
-            if not (link.to_place in self.links_by_to):
-                self.links_by_to[link.to_place] = {}
-            self.links_by_to[link.to_place][link.id] = link
+            if not (link.dest_place_id in self.links_by_to):
+                self.links_by_to[link.dest_place_id] = {}
+            self.links_by_to[link.dest_place_id][link.id] = link
 
     def get_link(self, link_id: uuid.UUID) -> Link:
         return self.links.get(link_id, None)
@@ -103,8 +103,8 @@ class GraphStore:
     def remove_link(self, link_id: uuid.UUID):
         if link_id in self.links:
             link = self.links[link_id]
-            del self.links_by_from[link.from_place][link_id]
-            del self.links_by_to[link.to_place][link_id]
+            del self.links_by_from[link.src_place_id][link_id]
+            del self.links_by_to[link.dest_place_id][link_id]
             del self.links[link_id]
 
 
@@ -123,7 +123,7 @@ class BasicEvaluator:
                 # print("Link: {}".format(link))
                 if link.name.startswith("op"):
                     op_result = self.evaluate(
-                        graph.get_place(link.to_place),
+                        graph.get_place(link.dest_place_id),
                         graph)
                     if root.attr["name"] == "+":
                         final_value += op_result
@@ -141,40 +141,41 @@ class GraphTraversalContext:
         self.place_stack = [start_place]
         self.gs = gs
 
-    def outl(self) -> Dict[uuid.UUID, Link]:
+    def outl(self, place_id: uuid.UUID = None) -> Dict[uuid.UUID, Link]:
         """Gets links going out from the current place by link id"""
-        return gs.get_links_from(self.place.id)
+        return gs.get_links_from(place_id if place_id else self.place.id)
 
-    def inl(self) -> Dict[uuid.UUID, Link]:
+    def inl(self, place_id: uuid.UUID = None) -> Dict[uuid.UUID, Link]:
         """Gets links going in to the current place by link id"""
-        return gs.get_links_to(self.place.id)
+        return gs.get_links_to(place_id if place_id else self.place.id)
 
-    def outnl(self) -> Dict[str, Link]:
+    def outnl(self, place_id: uuid.UUID = None) -> Dict[str, Link]:
         """Gets links going out from the current place by attribute name"""
-        out_links = self.outl()
+        out_links = self.outl(place_id)
         return {v.name: v for k, v in out_links.items()}
 
-    def innl(self) -> Dict[str, Link]:
+    def innl(self, place_id: uuid.UUID = None) -> Dict[str, Link]:
         """Gets links going in to the current place by attribute name"""
-        in_links = self.inl()
+        in_links = self.inl(place_id)
         return {v.name: v for k, v in in_links.items()}
 
-    def focus(self, attr_name: str):
+    def focus(self, *args: List[str]):
         """Focus a connected connected place by attrbiute name"""
-        self.focus_name(attr_name)
+        for attr_name in args:
+            self.focus_name(attr_name)
 
     def focus_name(self, attr_name: str):
         """Traverse from the current place to another by way of link name"""
         attr_links = self.outnl()
         if attr_name in attr_links:
-            self.place = gs.get_place(attr_links[attr_name].to_place)
+            self.place = gs.get_place(attr_links[attr_name].dest_place_id)
             self.place_stack.append(self.place.id)
 
     def focus_link(self, id: uuid.UUID):
         """Traverse from the current place to another though out link id"""
         out_links = self.outl()
         if id in out_links:
-            self.place = gs.get_place(out_links[id].to_place)
+            self.place = gs.get_place(out_links[id].dest_place_id)
             self.place_stack.append(self.place.id)
 
     def focus_place(self, id: uuid.UUID):
@@ -210,14 +211,37 @@ class GraphTraversalContext:
     def get_attr(self, name: str):
         return self.place.attr[name]
 
-    def show(self) -> str:
+    def show_level(
+            self,
+            link_name: str,
+            place_id: uuid.UUID,
+            curr_level: int = 0,
+            max_level: int = 0) -> str:
+        place = self.gs.get_place(place_id)
+        if not place: return
+        print('|{}'.format('-'*curr_level), end=' ')
+        place_str = str(place)
+        if curr_level > max_level:
+            print('...')
+            return
+        print('{} => {}'.format(link_name, place_str))
+        for out_name, out_link in self.outnl(place_id).items():
+            if place:
+                self.show_level(
+                    out_name, out_link.dest_place_id, curr_level+1, max_level)
+
+    def show(self, level: int = 1) -> str:
         """Gives a summary of the current place + out links"""
         self.curr()
         for out_name, out_link in self.outnl().items():
-            place = self.gs.get_place(out_link.to_place)
-            if place:
-                place_str = str(place)
-                print('|-- {} => {}'.format(out_name, place_str))
+            self.show_level(out_name, out_link.dest_place_id, 1, level)
+            # place = self.gs.get_place(out_link.dest_place_id)
+            # if place:
+            #     place_str = str(place)
+            #     print('|{}'.format('--'*level), end=' ')
+            #     print('{} => {}'.format(out_name, place_str))
+            #     if level > 0:
+            #         self.show()
 
 
 gs = GraphStore()
@@ -278,17 +302,28 @@ def command_help():
 
 commands['?'] = command_help
 
+def command_show(depth: str = '5'):
+    """Prints the current expression to depth [0] (default: 3)"""
+    cxt.show(int(depth))
+
+commands['s'] = command_show
+
 print('Welcome to Shock! An example expression has already been initialized '
       'for you. To exit, press Ctrl+C (Ctrl+Z for Windows) twice.')
-while True:
-    raw_command = input('> ')
-    command = raw_command.split()
-    if command[0] in commands:
-        try:
-            result = commands[command[0]](*command[1:])
-            if result:
-                print(result)
-        except Exception as err:
-            print(repr(err))
-    else:
-        print('"{}" is not a valid command (see "?")'.format(raw_command))
+
+def repl():
+    while True:
+        raw_command = input('> ')
+        command = raw_command.split()
+        if command and len(command) > 0 and command[0] in commands:
+            try:
+                result = commands[command[0]](*command[1:])
+                if result:
+                    print(result)
+            except Exception as err:
+                print(repr(err))
+        else:
+            print('"{}" is not a valid command (see "?")'.format(raw_command))
+
+
+repl()
