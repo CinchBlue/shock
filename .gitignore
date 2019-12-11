@@ -10,4 +10,7 @@ Cargo.lock
 **/*.rs.bk
 
 # These are for CLion-specific Rust project files.
-/.idea/
+**/.idea/
+
+# Python-related Gitignore
+**/*.pyc
