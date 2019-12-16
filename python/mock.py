@@ -1,5 +1,9 @@
-import uuid
-from typing import Dict, Tuple, Sequence, List
+import sys
+
+try:
+    import curses as curses
+except ImportError:
+    import windows_curses as curses
 
 from shocklang.core.data import Place, Link, GraphStore
 from shocklang.core.eval import BasicEvaluator
@@ -86,6 +90,8 @@ commands['stack'] = command_stack
 print('Welcome to Shock! An example expression has already been initialized '
       'for you. To exit, press Ctrl+C (Ctrl+Z for Windows) twice.')
 
+commands['exit'] = lambda: sys.exit(0)
+
 
 def repl():
     while True:
@@ -96,6 +102,8 @@ def repl():
                 result = commands[command[0]](*command[1:])
                 if result:
                     print(result)
+            except SystemExit as err:
+                break
             except Exception as err:
                 print(repr(err))
         else:
