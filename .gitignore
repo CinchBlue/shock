@@ -14,3 +14,4 @@ Cargo.lock
 
 # Python-related Gitignore
 **/*.pyc
+**/venv/
