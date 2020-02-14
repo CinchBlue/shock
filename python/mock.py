@@ -5,9 +5,9 @@ try:
 except ImportError:
     import windows_curses as curses
 
-from shocklang.core.data import Place, Link, GraphStore
+from shocklang.core.graph.data import Place, Link, GraphStore
 from shocklang.core.eval import BasicEvaluator
-from shocklang.graph import GraphTraversalContext
+from shocklang.core.graph.context import GraphTraversalContext
 
 gs = GraphStore()
 
@@ -60,13 +60,15 @@ commands['i'] = cxt.innl
 commands['o'] = cxt.outnl
 
 
-def command_help():
-    """Prints every current bound command and its documentation string"""
-    for command_name, command in commands.items():
-        print('{}: {}'.format(command_name, command.__doc__))
+def command_help_builder(commands):
+    def command_help():
+        """Prints every current bound command and its documentation string"""
+        for command_name, command in commands.items():
+            print('{}: {}'.format(command_name, command.__doc__))
+    return command_help
 
 
-commands['?'] = command_help
+commands['?'] = command_help_builder(commands)
 
 
 def command_show(depth: str = '5'):

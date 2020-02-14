@@ -1,4 +1,4 @@
-from shocklang.core.data import Place, GraphStore
+from shocklang.core.graph.data import Place, GraphStore
 
 
 class BasicEvaluator:

@@ -1,7 +1,7 @@
 import uuid
 from typing import Dict, List
 
-from shocklang.core.data import GraphStore, Link
+from shocklang.core.graph.data import GraphStore, Link
 from shocklang.core.eval import BasicEvaluator
 
 
