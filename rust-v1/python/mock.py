@@ -9,6 +9,8 @@ from shocklang.core.graph.data import Place, Link, GraphStore
 from shocklang.core.eval import BasicEvaluator
 from shocklang.core.graph.context import GraphTraversalContext
 
+from shocklang.core.parser import parser
+
 gs = GraphStore()
 
 # Create an arithmetic expression going top-down for (+ 0 .. 11)
@@ -111,5 +113,9 @@ def repl():
         else:
             print('"{}" is not a valid command (see "?")'.format(raw_command))
 
+while True:
+    raw_command = input('> ')
+    print(parser.parse(raw_command))
 
 repl()
+
