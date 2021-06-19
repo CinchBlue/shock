@@ -1,0 +1,8 @@
+.vscode/
+build/
+include/shocked/generated/*
+**/*.exe
+**/*.lib
+**/*.so
+**/*.a
+**/*.pdb
